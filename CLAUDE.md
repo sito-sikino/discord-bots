@@ -4,20 +4,21 @@
 
 ## プロジェクト概要
 
-このプロジェクトは、**統合プロセス型**で3つの独立したDiscord Botクライアントが協調動作する効率化されたマルチボットLLMシステムです：
-- **Spectra Bot**: 基底エージェント兼一般対話ボット（単独受信）
-- **LynQ Bot**: 論理分析専門エージェント（シグナル待機）
-- **Paz Bot**: 創作アイデア専門エージェント（シグナル待機）
+このプロジェクトは、**LangGraphベース統合プロセス型**で3つの独立したDiscord Botクライアントが協調動作する効率化されたマルチボットLLMシステムです：
+- **Spectra Bot**: 基底エージェント兼一般対話ボット（単独受信・ワークフロー起動）
+- **LynQ Bot**: 論理分析専門エージェント（LangGraphワークフロー制御）
+- **Paz Bot**: 創作アイデア専門エージェント（LangGraphワークフロー制御）
 
 ## システムアーキテクチャ
 
-### 統合プロセス型設計パターン
-- **単一プロセス管理**: 1つのPythonプロセスで3つの独立したDiscordクライアントを効率管理
+### LangGraphベース統合プロセス型設計パターン
+- **単一プロセス管理**: 1つのPythonプロセスで3つの独立したDiscordクライアント + LangGraphワークフロー
 - **Discord独立性**: 各ボットが独立したトークン・アイコン・名前・個性を持つ
-- **単独受信**: Spectraのみがメッセージを受信し、レート制限を回避
-- **効率化委譲**: 中間Discord投稿なしでサブエージェントに直接委譲
-- **軽量シグナリング**: AsyncIO標準キューによる内部通信
-- **レート制限対応**: 最大2回のシーケンシャルLLMアクセス
+- **単独受信**: Spectraのみがメッセージを受信し、LangGraphワークフローを起動
+- **StateGraph制御**: 明確で可視化されたワークフロー定義による効率的委譲
+- **TypedDict状態管理**: 構造化された状態管理とoperator.addによるメッセージ蓄積
+- **条件付きルーティング**: add_conditional_edgesによる動的エージェント選択
+- **LangChain標準**: ChatGoogleGenerativeAI + 公式パターンによる標準化
 
 ### ボットの二重役割・責任範囲
 - **Spectra**: 基底エージェント（メタ分析・意思決定） + 一般対話ボット（ファシリテーション）
@@ -33,15 +34,15 @@
 - **プラットフォーム**: Discord Bot API (discord.py)
 - **知識統合**: Obsidian MCP Server (https://github.com/MarkusPfundstein/mcp-obsidian)
 
-### 主要依存関係（軽量化）
+### 主要依存関係（LangGraph準拠）
 - discord.py - Discord botフレームワーク
-- langchain - LLMフレームワーク
-- langgraph - エージェントワークフロー管理
-- langchain-google-genai - Gemini APIクライアント
-- asyncio - 非同期処理（Python標準）
-- json - データ管理（Python標準）
+- langchain - LLMフレームワーク基盤
+- langgraph - StateGraphワークフロー管理
+- langchain-google-genai - Gemini API統合（ChatGoogleGenerativeAI）
+- typing-extensions - TypedDict状態管理
+- operator - メッセージ蓄積（operator.add）
 
-**最適化ポイント**: Redis不要、データベース不要、追加ライブラリ最小限
+**LangGraph最適化**: 公式パターン準拠、StateGraph可視化、条件付きエッジルーティング
 
 ### 開発環境
 - **仮想環境**: 必ずvenv仮想環境内で開発（`python -m venv venv`）
@@ -79,7 +80,6 @@ PAZ_DISCORD_TOKEN=
 
 # LLM設定
 GEMINI_API_KEY=
-GEMINI_API_COORDINATOR_URL=http://localhost:8080
 
 # Discord設定
 DISCORD_GUILD_ID=
@@ -101,57 +101,62 @@ MAX_LLM_CALLS_PER_REQUEST=2
 
 ## 効率化された開発ワークフロー
 
-### 3パターン動作フロー
+### LangGraphワークフロー動作フロー
 
 #### Pattern 1: Spectra自己応答（一般対話）
 1. **単独受信**: Spectraのみがメッセージを受信
-2. **深層分析**: LLMで意図・文脈を分析（1回目）
-3. **自己判断**: 一般対話がSpectra最適と判断
-4. **直接応答**: Spectraが直接LLM応答（2回目）
-5. **Discord投稿**: 即座に応答投稿
+2. **StateGraph起動**: AgentState構築 → analyze_node実行
+3. **深層分析**: LLMで意図・文脈を分析（1回目）
+4. **ルーティング**: 条件付きエッジで "spectra" 選択
+5. **直接応答**: spectra_respond_nodeでLLM応答（2回目）
+6. **Discord投稿**: AgentState.messagesから応答取得・投稿
 
-#### Pattern 2: 専門ボット直接委謗（効率化版）
+#### Pattern 2: 専門ボット直接委譲（効率化版）
 1. **単独受信**: Spectraのみがメッセージを受信
-2. **深層分析**: LLMで意図・文脈を分析（1回目）
-3. **専門判断**: LynQ/Pazが最適と判断
-4. **内部シグナル**: AsyncIOキューでサブエージェントに通知（中間投稿なし）
-5. **専門応答**: サブエージェントが直接LLM応答（2回目）
-6. **Discord投稿**: サブエージェントが応答投稿
+2. **StateGraph起動**: AgentState構築 → analyze_node実行
+3. **深層分析**: LLMで意図・文脈を分析（1回目）
+4. **ルーティング**: 条件付きエッジで "lynq/paz" 選択
+5. **専門応答**: lynq/paz_respond_nodeでLLM応答（2回目）
+6. **Discord投稿**: 専門エージェント名義で応答投稿
 
 #### Pattern 3: マルチエージェント協調（複合要求）
 1. **単独受信**: Spectraのみがメッセージを受信
-2. **深層分析**: LLMで複合要求を分析（1回目）
-3. **協調判断**: 複数ボットが必要と判断
-4. **調整投稿**: Spectraが協調開始を通知
-5. **順次実行**: LynQ→Paz→Spectraの順で応答
-6. **統合応答**: Spectraが最終統合を実行
+2. **StateGraph起動**: AgentState構築 → analyze_node実行
+3. **深層分析**: LLMで複合要求を分析（1回目）
+4. **ルーティング**: 条件付きエッジで "multi" 選択
+5. **協調制御**: multi_coordinate_nodeで調整メッセージ
+6. **統合応答**: StateGraph内での順次実行・統合
 
-### 軽量調整メカニズム
-- **AsyncIOキュー**: 内部シグナリング（Redis不要）
-- **ファイルベースMemory**: 軽量履歴共有
-- **レート制限対応**: 最大2回のシーケンシャルLLMアクセス
-- **重複回避**: 単一制御点による完全な重複防止
+### LangGraph制御メカニズム
+- **StateGraph**: 可視化されたワークフロー定義（Redis不要）
+- **TypedDict状態**: 構造化された状態管理とメッセージ蓄積
+- **条件付きエッジ**: 動的ルーティングによる最適化
+- **LangChain統合**: 公式パターンによる安定性・保守性向上
 
 ## 開発ガイドライン
 
-### 統合プロセス実装パターン
+### LangGraphベース実装パターン
 メインシステムは以下を実装します：
 
 #### コアコンポーネント
-- **MultiDiscordBotSystem**: 3つのDiscordクライアント統合管理
-- **BotSignalManager**: AsyncIOキューによる内部シグナリング
-- **LangGraphエージェント**: Spectraの分析・判断フロー
+- **MultiDiscordBotSystem**: 3つのDiscordクライアント + LangGraphワークフロー統合管理
+- **MultiAgentWorkflow**: StateGraphによるワークフロー定義・実行
+- **AgentState (TypedDict)**: 構造化された状態管理
 - **ConversationMemory**: ファイルベース履歴管理
-- **ObsidianMCPClient**: 知識ベース統合
+- **ChatGoogleGenerativeAI**: 公式Gemini API統合
 
-#### ボット固有機能
-- **Spectra**: 基底エージェント＋一般対話ボット
-- **LynQ/Paz**: シグナル待機＋専門応答ボット
+#### エージェントノード
+- **analyze_node**: Spectraによる深層分析・ルーティング判断
+- **spectra_respond_node**: 一般対話・ファシリテーション応答
+- **lynq_respond_node**: 論理分析専門応答
+- **paz_respond_node**: 創作アイデア専門応答
+- **multi_coordinate_node**: マルチエージェント協調制御
 
-### 効率化された応答戦略
-- **Spectra直接**: 一般対話・ファシリテーションが最適な場合
-- **即時委謗**: 専門性が明確な場合（中間投稿なし）
-- **協調委謗**: 複数視点が必要な複合要求（調整投稿あり）
+### LangGraphワークフロー戦略
+- **条件付きルーティング**: analyze_nodeの分析結果に基づく自動エージェント選択
+- **StateGraph制御**: 明確で追跡可能なワークフロー実行
+- **型安全性**: TypedDictによる構造化された状態管理
+- **エラー処理**: 統一されたエラーハンドリングとグレースフル縮退
 
 ### エラーハンドリング・復旧機構
 - **サブエージェント障害**: Spectraのみで縮退運用継続
@@ -213,13 +218,13 @@ MAX_LLM_CALLS_PER_REQUEST=2
 - **長時間稼働**: メモリリーク・接続維持
 - **障害復旧**: Discord接続切断・API障害からの復旧
 
-### 重要な実装原則
+### 重要な実装原則（LangGraph版）
 - **venv環境必須**: 必ずvenv仮想環境内で開発・実行
-- **レート制限遵守**: 最大2回のシーケンシャルLLMアクセス
+- **LangChain準拠**: 公式パターン（StateGraph + TypedDict + ChatGoogleGenerativeAI）
 - **Discord独立性**: 3つの独立したBotアカウント維持
-- **効率化委譲**: Pattern 2で中間Discord投稿なし
-- **LangGraph標準**: 追加ライブラリ最小限
-- **エラー耐性**: グレースフルな縮退機能
+- **ワークフロー可視化**: StateGraphによる明確なフロー定義
+- **型安全性**: TypedDictによる構造化された状態管理
+- **エラー耐性**: 統一されたエラーハンドリングとグレースフル縮退
 
 ### テスト・保管プロセス
 - **段階的テスト**: Discord連携可能になった段階から、各ステップごとにDiscord上で動作テスト実施

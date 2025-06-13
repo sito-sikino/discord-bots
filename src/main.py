@@ -66,7 +66,8 @@ def validate_environment() -> bool:
         "SPECTRA_DISCORD_TOKEN",
         "LYNQ_DISCORD_TOKEN", 
         "PAZ_DISCORD_TOKEN",
-        "DISCORD_GUILD_ID"
+        "DISCORD_GUILD_ID",
+        "GEMINI_API_KEY"
     ]
     
     missing_vars = []
@@ -124,13 +125,15 @@ async def main():
         # ボット設定作成
         spectra_config, lynq_config, paz_config = create_bot_configs()
         guild_id = int(os.getenv("DISCORD_GUILD_ID"))
+        gemini_api_key = os.getenv("GEMINI_API_KEY")
         
         # マルチボットシステム初期化
         multi_bot_system = MultiDiscordBotSystem(
             spectra_config=spectra_config,
             lynq_config=lynq_config,
             paz_config=paz_config,
-            guild_id=guild_id
+            guild_id=guild_id,
+            gemini_api_key=gemini_api_key
         )
         
         logger.info("📊 システム構成:")

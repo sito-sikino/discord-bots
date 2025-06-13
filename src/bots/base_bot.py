@@ -15,9 +15,12 @@ from typing import Optional, Dict, Any
 import discord
 from discord.ext import commands
 
-from ..core.signal_manager import BotSignalManager, BotSignal, SignalType
 from ..core.conversation_memory import ConversationMemory, ConversationMessage
-from ..core.multi_bot_system import BotConfig
+from ..core.bot_config import BotConfig
+from ..agents.workflow import MultiAgentWorkflow
+from ..agents.state import AgentState
+
+from langchain_core.messages import HumanMessage, AIMessage
 
 
 class BaseBot(ABC):
@@ -26,11 +29,11 @@ class BaseBot(ABC):
     def __init__(
         self,
         config: BotConfig,
-        signal_manager: BotSignalManager,
+        workflow: MultiAgentWorkflow,
         memory: ConversationMemory
     ):
         self.config = config
-        self.signal_manager = signal_manager
+        self.workflow = workflow
         self.memory = memory
         self.logger = logging.getLogger(f"{__name__}.{self.config.name}")
         
@@ -47,7 +50,6 @@ class BaseBot(ABC):
         
         # イベントハンドラー登録
         self._register_events()
-        self._register_signal_handlers()
     
     def _register_events(self) -> None:
         """Discordイベントハンドラー登録"""
@@ -71,29 +73,6 @@ class BaseBot(ABC):
             self.logger.error(f"Discord event error: {event}", exc_info=True)
             await self.on_discord_error(event, args, kwargs)
     
-    def _register_signal_handlers(self) -> None:
-        """シグナルハンドラー登録"""
-        # 各ボットで実装すべきシグナルハンドラーを登録
-        self.signal_manager.register_signal_handler(
-            self.config.name.lower(),
-            SignalType.DELEGATE_TO_LYNQ,
-            self.handle_delegation_signal
-        )
-        self.signal_manager.register_signal_handler(
-            self.config.name.lower(), 
-            SignalType.DELEGATE_TO_PAZ,
-            self.handle_delegation_signal
-        )
-        self.signal_manager.register_signal_handler(
-            self.config.name.lower(),
-            SignalType.COLLABORATION_REQUEST,
-            self.handle_collaboration_signal
-        )
-        self.signal_manager.register_signal_handler(
-            self.config.name.lower(),
-            SignalType.RESPONSE_READY,
-            self.handle_response_signal
-        )
     
     async def save_message_to_memory(self, message: discord.Message) -> None:
         """メッセージを履歴に保存"""
@@ -149,6 +128,45 @@ class BaseBot(ABC):
         """会話文脈を取得"""
         return await self.memory.get_recent_context(channel_id, context_length)
     
+    async def build_agent_state(self, message: discord.Message) -> AgentState:
+        """DiscordメッセージからAgentStateを構築"""
+        # 会話履歴を取得
+        history = await self.memory.get_channel_history(message.channel.id, limit=10)
+        
+        # LangChain標準メッセージ形式に変換
+        messages = []
+        for hist_msg in history:
+            if hist_msg.message_type == "user":
+                msg = HumanMessage(content=hist_msg.content)
+            else:
+                msg = AIMessage(content=hist_msg.content)
+            messages.append(msg)
+        
+        # 現在のメッセージを追加
+        current_msg = HumanMessage(content=message.content)
+        messages.append(current_msg)
+        
+        # AgentStateの構築
+        state: AgentState = {
+            "channel_id": message.channel.id,
+            "user_id": message.author.id,
+            "user_name": message.author.display_name,
+            "message_id": str(message.id),
+            "messages": messages,
+            "current_agent": None,
+            "decision": None,
+            "analysis": None,
+            "routing": None,
+            "collaboration_mode": None,
+            "collaboration_agents": None,
+            "conversation_context": await self.get_conversation_context(message.channel.id),
+            "obsidian_context": None,
+            "error": None,
+            "metadata": None
+        }
+        
+        return state
+    
     # 抽象メソッド - 各ボットで実装
     @abstractmethod
     async def on_bot_ready(self) -> None:
@@ -158,21 +176,6 @@ class BaseBot(ABC):
     @abstractmethod
     async def on_message_received(self, message: discord.Message) -> None:
         """メッセージ受信時の処理"""
-        pass
-    
-    @abstractmethod
-    async def handle_delegation_signal(self, signal: BotSignal) -> None:
-        """委譲シグナル処理"""
-        pass
-    
-    @abstractmethod
-    async def handle_collaboration_signal(self, signal: BotSignal) -> None:
-        """協調シグナル処理"""
-        pass
-    
-    @abstractmethod
-    async def handle_response_signal(self, signal: BotSignal) -> None:
-        """応答シグナル処理"""
         pass
     
     async def on_discord_error(
