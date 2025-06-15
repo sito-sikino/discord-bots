@@ -1,0 +1,46 @@
+
+services:
+  # PostgreSQLデータベース（pgvector対応）
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: langraph_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: langraph_memory
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - langraph_network
+
+  # LangGraphボットアプリケーション
+  bot:
+    build: .
+    container_name: langraph_bot
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - POSTGRES_URI=postgresql://postgres:postgres@postgres:5432/langraph_memory
+    volumes:
+      - ./bot.log:/app/bot.log
+      - ./.env:/app/.env:ro
+    stdin_open: true
+    tty: true
+    networks:
+      - langraph_network
+
+volumes:
+  postgres_data:
+
+networks:
+  langraph_network:
+    driver: bridge

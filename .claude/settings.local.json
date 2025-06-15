@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:langchain-ai.github.io)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:python.langchain.com)",
+      "WebFetch(domain:pypi.org)",
+      "Bash(find:*)",
+      "Bash(mv:*)",
+      "Bash(source:*)",
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "Bash(pkill:*)",
+      "Bash(kill:*)",
+      "Bash(ls:*)",
+      "Bash(timeout:*)",
+      "Bash(grep:*)",
+      "Bash(mkdir:*)",
+      "Bash(sudo docker compose:*)",
+      "Bash(docker compose:*)",
+      "Bash(chmod:*)"
+    ],
+    "deny": []
+  }
+}

@@ -1,0 +1,13 @@
+langchain>=0.3.25
+langchain-google-genai>=2.1.5
+langgraph>=0.4.8
+langchain-community>=0.3.25
+langsmith>=0.3.0,<0.4.0
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+langgraph-checkpoint-sqlite>=2.0.10
+langgraph-checkpoint-postgres>=2.0.21
+psycopg>=3.2.0
+asyncpg>=0.29.0
+mcp[cli]>=1.0.0
+requests>=2.32.0
